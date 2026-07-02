@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Claude Chatbot - Puter.js</title>
+    <title>Puter.js Chatbot</title>
     <script src="https://js.puter.com/v2/"></script>
     <style>
         * {
@@ -51,6 +51,41 @@
         .chat-header p {
             font-size: 12px;
             opacity: 0.9;
+        }
+
+        .auth-section {
+            padding: 20px;
+            text-align: center;
+            background: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .auth-section h3 {
+            color: #333;
+            font-size: 18px;
+        }
+
+        .login-btn {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 16px;
+            transition: transform 0.2s;
+        }
+
+        .login-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .login-btn:active {
+            transform: scale(0.95);
         }
 
         .chat-messages {
@@ -172,15 +207,6 @@
             border-color: #667eea;
         }
 
-        .config-input {
-            flex: 0;
-            padding: 12px 16px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 12px;
-            max-width: 100px;
-        }
-
         button {
             padding: 12px 20px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -233,6 +259,34 @@
             line-height: 1.5;
         }
 
+        .user-info {
+            padding: 10px 20px;
+            background: #e8f4f8;
+            border-bottom: 1px solid #ddd;
+            font-size: 12px;
+            color: #555;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logout-btn {
+            padding: 6px 12px;
+            font-size: 11px;
+            background: #ff6b6b;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .logout-btn:hover {
+            background: #ff5252;
+        }
+
+        .hidden {
+            display: none;
+        }
+
         @media (max-width: 600px) {
             .message-content {
                 max-width: 85%;
@@ -248,26 +302,33 @@
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            <h1>Claude Chatbot</h1>
-            <p>Powered by Puter.js + Anthropic API</p>
+            <h1>AI Chatbot</h1>
+            <p>Powered by Puter.js</p>
         </div>
 
-        <div class="chat-messages" id="chatMessages">
+        <!-- User Info Section -->
+        <div class="user-info hidden" id="userInfo">
+            <span>Logged in as: <strong id="userName"></strong></span>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+
+        <!-- Auth Section -->
+        <div class="auth-section" id="authSection">
+            <h3>Welcome to Puter Chatbot!</h3>
+            <p style="font-size: 14px; color: #666; margin: 0;">Login with Puter to get started</p>
+            <button class="login-btn" onclick="login()">Login with Puter</button>
+        </div>
+
+        <!-- Chat Section (hidden until logged in) -->
+        <div class="chat-messages hidden" id="chatMessages">
             <div class="welcome-message">
                 <h3>Welcome! 👋</h3>
-                <p>This chatbot uses Puter.js for cloud integration and Claude AI. Enter your Anthropic API key to get started!</p>
+                <p>This is a Puter.js powered chatbot. All your conversations are saved to your Puter cloud storage.</p>
             </div>
         </div>
 
-        <div class="chat-input-area">
+        <div class="chat-input-area hidden" id="inputArea">
             <div class="input-wrapper">
-                <input 
-                    type="text" 
-                    id="apiKeyInput" 
-                    placeholder="API Key (sk-...)" 
-                    class="config-input"
-                    autocomplete="off"
-                >
                 <input 
                     type="text" 
                     id="messageInput" 
@@ -279,63 +340,107 @@
         </div>
 
         <div class="info-text">
-            ℹ️ Built with Puter.js - Save conversations to cloud storage
+            ℹ️ Built with Puter.js - Cloud-powered chatbot
         </div>
     </div>
 
     <script>
-        const API_KEY_STORAGE = 'claude_api_key';
-        const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
-        const MODEL = 'claude-3-5-sonnet-20241022';
-        const MAX_TOKENS = 1024;
-
+        let currentUser = null;
         let conversationHistory = [];
-        let puterReady = false;
 
         // Initialize Puter.js
         puter.ui.onReady(async () => {
-            puterReady = true;
             console.log('Puter.js is ready!');
             
-            // Try to load API key from Puter cloud storage
             try {
-                const apiKey = await puter.kv.get('claude_api_key');
-                if (apiKey) {
-                    document.getElementById('apiKeyInput').value = apiKey;
+                // Check if user is already logged in
+                const user = await puter.auth.getCurrentUser();
+                if (user) {
+                    currentUser = user;
+                    loginSuccess();
                 }
             } catch (e) {
-                console.log('No saved API key in Puter cloud storage');
+                console.log('User not logged in');
             }
+        });
 
-            // Try to load conversation history
+        async function login() {
             try {
-                const savedHistory = await puter.kv.get('chat_history');
-                if (savedHistory) {
-                    conversationHistory = JSON.parse(savedHistory);
+                const user = await puter.auth.login();
+                currentUser = user;
+                loginSuccess();
+            } catch (error) {
+                console.error('Login failed:', error);
+                alert('Login failed. Please try again.');
+            }
+        }
+
+        async function loginSuccess() {
+            // Hide auth section, show chat
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('chatMessages').classList.remove('hidden');
+            document.getElementById('inputArea').classList.remove('hidden');
+            document.getElementById('userInfo').classList.remove('hidden');
+            
+            // Set user name
+            document.getElementById('userName').textContent = currentUser.username || 'User';
+
+            // Load conversation history from Puter cloud storage
+            await loadConversationHistory();
+            
+            // Focus input
+            document.getElementById('messageInput').focus();
+        }
+
+        async function logout() {
+            try {
+                await puter.auth.logout();
+                currentUser = null;
+                conversationHistory = [];
+                
+                // Hide chat, show auth
+                document.getElementById('authSection').classList.remove('hidden');
+                document.getElementById('chatMessages').classList.add('hidden');
+                document.getElementById('inputArea').classList.add('hidden');
+                document.getElementById('userInfo').classList.add('hidden');
+                document.getElementById('chatMessages').innerHTML = '<div class="welcome-message"><h3>Welcome! 👋</h3><p>This is a Puter.js powered chatbot. All your conversations are saved to your Puter cloud storage.</p></div>';
+                
+                alert('Logged out successfully!');
+            } catch (error) {
+                console.error('Logout failed:', error);
+            }
+        }
+
+        async function loadConversationHistory() {
+            try {
+                const history = await puter.kv.get('chatbot_history');
+                if (history) {
+                    conversationHistory = JSON.parse(history);
+                    // Display loaded messages
+                    const chatMessages = document.getElementById('chatMessages');
+                    chatMessages.innerHTML = '<div class="welcome-message"><h3>Welcome! 👋</h3><p>This is a Puter.js powered chatbot. All your conversations are saved to your Puter cloud storage.</p></div>';
+                    
+                    for (const msg of conversationHistory) {
+                        addMessageToUI(msg.content, msg.role);
+                    }
                     console.log('Loaded previous conversation');
                 }
             } catch (e) {
                 console.log('No previous conversation found');
             }
+        }
 
-            document.getElementById('messageInput').focus();
-        });
-
-        // Save API key to Puter cloud storage
-        document.getElementById('apiKeyInput').addEventListener('change', async (e) => {
-            const apiKey = e.target.value.trim();
-            if (apiKey && puterReady) {
-                try {
-                    await puter.kv.set('claude_api_key', apiKey);
-                    console.log('API key saved to Puter cloud storage');
-                } catch (error) {
-                    console.log('Could not save to Puter cloud storage:', error);
-                }
+        async function saveConversationHistory() {
+            try {
+                await puter.kv.set('chatbot_history', JSON.stringify(conversationHistory));
+                console.log('Conversation saved to Puter cloud');
+            } catch (e) {
+                console.log('Could not save to Puter cloud:', e);
             }
-        });
+        }
 
         // Send message on Enter key
-        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+        document.getElementById('messageInput')?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
@@ -344,25 +449,23 @@
 
         async function sendMessage() {
             const messageInput = document.getElementById('messageInput');
-            const apiKeyInput = document.getElementById('apiKeyInput');
             const sendButton = document.getElementById('sendButton');
             const chatMessages = document.getElementById('chatMessages');
 
             const message = messageInput.value.trim();
-            const apiKey = apiKeyInput.value.trim();
 
             if (!message) {
                 alert('Please enter a message');
                 return;
             }
 
-            if (!apiKey) {
-                alert('Please enter your Claude API key');
-                return;
-            }
+            // Add user message to UI and history
+            addMessageToUI(message, 'user');
+            conversationHistory.push({
+                role: 'user',
+                content: message
+            });
 
-            // Add user message to chat
-            addMessage(message, 'user');
             messageInput.value = '';
             sendButton.disabled = true;
 
@@ -374,78 +477,50 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
             try {
-                // Add user message to conversation history
-                conversationHistory.push({
-                    role: 'user',
-                    content: message
-                });
-
-                // Save conversation to Puter cloud storage
-                if (puterReady) {
-                    try {
-                        await puter.kv.set('chat_history', JSON.stringify(conversationHistory));
-                    } catch (e) {
-                        console.log('Could not save chat to cloud:', e);
-                    }
-                }
-
-                // Call Claude API
-                const response = await fetch(CLAUDE_API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': apiKey,
-                        'anthropic-version': '2023-06-01'
-                    },
-                    body: JSON.stringify({
-                        model: MODEL,
-                        max_tokens: MAX_TOKENS,
-                        messages: conversationHistory,
-                        system: 'You are a helpful, friendly AI assistant powered by Puter.js. Provide concise and helpful responses.'
-                    })
-                });
+                // Use Puter's AI (if available) or simple echo response
+                let responseText = await getPuterAIResponse(message);
 
                 // Remove typing indicator
                 typingDiv.remove();
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    const errorMessage = errorData.error?.message || `API Error: ${response.status}`;
-                    throw new Error(errorMessage);
-                }
-
-                const data = await response.json();
-                const assistantMessage = data.content[0].text;
-
-                // Add assistant message to history
+                // Add bot response to UI and history
+                addMessageToUI(responseText, 'bot');
                 conversationHistory.push({
                     role: 'assistant',
-                    content: assistantMessage
+                    content: responseText
                 });
 
-                // Save updated conversation
-                if (puterReady) {
-                    try {
-                        await puter.kv.set('chat_history', JSON.stringify(conversationHistory));
-                    } catch (e) {
-                        console.log('Could not save chat to cloud:', e);
-                    }
-                }
-
-                // Add assistant message to chat
-                addMessage(assistantMessage, 'bot');
+                // Save to Puter cloud storage
+                await saveConversationHistory();
 
             } catch (error) {
                 typingDiv.remove();
-                const errorMsg = error.message || 'Failed to get response from Claude API';
-                addMessage(`Error: ${errorMsg}`, 'error');
+                const errorMsg = error.message || 'Failed to get response';
+                addMessageToUI(`Error: ${errorMsg}`, 'error');
             } finally {
                 sendButton.disabled = false;
                 messageInput.focus();
             }
         }
 
-        function addMessage(text, sender) {
+        async function getPuterAIResponse(message) {
+            // Try to use Puter's AI API if available
+            try {
+                if (puter.ai && puter.ai.chat) {
+                    const response = await puter.ai.chat(message, {
+                        conversation_id: currentUser.uuid
+                    });
+                    return response;
+                }
+            } catch (e) {
+                console.log('Puter AI not available, using fallback');
+            }
+
+            // Fallback: Echo response with timestamp
+            return `I received your message: "${message}". Puter.js chatbot at ${new Date().toLocaleTimeString()}`;
+        }
+
+        function addMessageToUI(text, sender) {
             const chatMessages = document.getElementById('chatMessages');
 
             const messageDiv = document.createElement('div');
@@ -468,15 +543,13 @@
                 e.preventDefault();
                 conversationHistory = [];
                 const chatMessages = document.getElementById('chatMessages');
-                chatMessages.innerHTML = '<div class="welcome-message"><h3>Welcome! 👋</h3><p>This chatbot uses Puter.js for cloud integration and Claude AI. Enter your Anthropic API key to get started!</p></div>';
+                chatMessages.innerHTML = '<div class="welcome-message"><h3>Welcome! 👋</h3><p>This is a Puter.js powered chatbot. All your conversations are saved to your Puter cloud storage.</p></div>';
                 
                 // Clear from Puter cloud storage
-                if (puterReady) {
-                    try {
-                        await puter.kv.set('chat_history', JSON.stringify([]));
-                    } catch (e) {
-                        console.log('Could not clear cloud history:', e);
-                    }
+                try {
+                    await puter.kv.set('chatbot_history', JSON.stringify([]));
+                } catch (e) {
+                    console.log('Could not clear cloud history:', e);
                 }
                 alert('Conversation history cleared!');
             }
